@@ -1,28 +1,26 @@
 ﻿"""Entry point for the AI Business Agent.
 
 Commands:
-    python -m app.main "any question"                       # free-text mode
+    python -m app.main "any question"
     python -m app.main ideas "<direction>" [--count N] [--model M]
+    python -m app.main metadata <ideas_file> [--index N] [--model M]
     python -m app.main report
 """
 import sys
 
 from app.models.llm import ask
-from app.workflows import idea_workflow, report_workflow
+from app.workflows import idea_workflow, metadata_workflow, report_workflow
 
 USAGE = '''Usage:
   python -m app.main "your question here"
   python -m app.main ideas "<direction>" [--count N] [--model MODEL]
+  python -m app.main metadata <ideas_file> [--index N] [--model MODEL]
   python -m app.main report
-
-Options for `ideas`:
-  --count N       number of ideas to generate (default 5)
-  --model NAME    override the model from .env for this run
 
 Examples:
   python -m app.main "What is machine learning?"
   python -m app.main ideas "printable wall art for engineering students" --count 5
-  python -m app.main ideas "space posters" --model qwen2.5-coder:7b
+  python -m app.main metadata data/processed/ideas_2026-09-26_191858.json --index 1
   python -m app.main report
 '''
 
@@ -52,6 +50,19 @@ def _parse_idea_args(args: list[str]) -> tuple[str, int, str | None]:
     return " ".join(args).strip(), count, model
 
 
+def _parse_metadata_args(args: list[str]) -> tuple[str, int, str | None]:
+    args, index_raw = _pop_flag(args, "--index")
+    index = 1
+    if index_raw is not None:
+        try:
+            index = int(index_raw)
+        except ValueError:
+            print(f"Error: --index needs an integer. Got: {index_raw!r}")
+            raise SystemExit(1)
+    args, model = _pop_flag(args, "--model")
+    return " ".join(args).strip(), index, model
+
+
 def main() -> None:
     args = sys.argv[1:]
 
@@ -66,6 +77,15 @@ def main() -> None:
             print(USAGE)
             return
         idea_workflow.run(direction=direction, count=count, model=model)
+        return
+
+    if args[0] == "metadata":
+        ideas_file, index, model = _parse_metadata_args(args[1:])
+        if not ideas_file:
+            print("Error: no ideas file given.")
+            print(USAGE)
+            return
+        metadata_workflow.run(ideas_file=ideas_file, index=index, model=model)
         return
 
     if args[0] == "report":
