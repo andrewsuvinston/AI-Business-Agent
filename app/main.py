@@ -1,17 +1,19 @@
 ﻿"""Entry point for the AI Business Agent.
 
 Commands:
-    python -m app.main "any question"                 # free-text mode
+    python -m app.main "any question"                       # free-text mode
     python -m app.main ideas "<direction>" [--count N] [--model M]
+    python -m app.main report
 """
 import sys
 
 from app.models.llm import ask
-from app.workflows import idea_workflow
+from app.workflows import idea_workflow, report_workflow
 
 USAGE = '''Usage:
   python -m app.main "your question here"
   python -m app.main ideas "<direction>" [--count N] [--model MODEL]
+  python -m app.main report
 
 Options for `ideas`:
   --count N       number of ideas to generate (default 5)
@@ -21,6 +23,7 @@ Examples:
   python -m app.main "What is machine learning?"
   python -m app.main ideas "printable wall art for engineering students" --count 5
   python -m app.main ideas "space posters" --model qwen2.5-coder:7b
+  python -m app.main report
 '''
 
 
@@ -63,6 +66,10 @@ def main() -> None:
             print(USAGE)
             return
         idea_workflow.run(direction=direction, count=count, model=model)
+        return
+
+    if args[0] == "report":
+        report_workflow.run()
         return
 
     prompt = " ".join(args)
