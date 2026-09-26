@@ -28,7 +28,7 @@ Reply with a JSON object with EXACTLY this shape:
       "format": "<what the buyer receives, e.g. 'PNG pack, 5 sizes, 300 DPI'>",
       "why_it_might_sell": "<one sentence — the market reason>",
       "difficulty": "easy",
-      "keywords": ["<3-6 search keywords>"],
+      "keywords": ["keyword one", "keyword two", "keyword three"],
       "price_range_inr": "<e.g. 'Rs.99-299'>"
     }
   ]
@@ -39,6 +39,7 @@ Rules:
 - Do NOT invent a "count" field.
 - Every idea must be a distinct product, not a variation of the same one.
 - "difficulty" must be one of: easy, medium, hard.
+- "keywords" must be a JSON ARRAY of SEPARATE strings. Do NOT put commas inside one string.
 """
 
 REQUIRED_IDEA_FIELDS = (
@@ -81,6 +82,29 @@ def _validate(result: Any) -> None:
             )
 
 
+def _normalize(ideas: list[dict]) -> None:
+    """Clean up common model quirks. Mutates `ideas` in place."""
+    for idea in ideas:
+        kws = idea.get("keywords", [])
+        if not isinstance(kws, list):
+            kws = [str(kws)]
+        cleaned: list[str] = []
+        for k in kws:
+            if not isinstance(k, str):
+                continue
+            # If a single string contains commas, split it into separate entries.
+            parts = [p.strip() for p in k.split(",") if p.strip()]
+            cleaned.extend(parts)
+        # Deduplicate while preserving order.
+        seen = set()
+        unique = []
+        for k in cleaned:
+            if k not in seen:
+                seen.add(k)
+                unique.append(k)
+        idea["keywords"] = unique
+
+
 def generate(direction: str, count: int = 5, model: Optional[str] = None) -> dict:
     """Generate `count` product ideas for a business `direction`.
 
@@ -93,4 +117,5 @@ def generate(direction: str, count: int = 5, model: Optional[str] = None) -> dic
     )
     result = ask_json(prompt=user_prompt, system=SYSTEM_PROMPT, model=model)
     _validate(result)
+    _normalize(result["ideas"])
     return result
