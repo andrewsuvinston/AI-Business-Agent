@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets — NEVER commit these
+.env
+
+# Generated / working data
+data/raw/*
+data/processed/*
+data/ready_to_upload/*
+data/rejected/*
+outputs/*
+!**/.gitkeep
+
+# Editor
+.vscode/
+.idea/
