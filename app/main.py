@@ -4,23 +4,19 @@ Commands:
     python -m app.main "any question"
     python -m app.main ideas "<direction>" [--count N] [--model M]
     python -m app.main metadata <ideas_file> [--index N] [--model M]
+    python -m app.main qc
     python -m app.main report
 """
 import sys
 
 from app.models.llm import ask
-from app.workflows import idea_workflow, metadata_workflow, report_workflow
+from app.workflows import idea_workflow, metadata_workflow, qc_workflow, report_workflow
 
 USAGE = '''Usage:
   python -m app.main "your question here"
   python -m app.main ideas "<direction>" [--count N] [--model MODEL]
   python -m app.main metadata <ideas_file> [--index N] [--model MODEL]
-  python -m app.main report
-
-Examples:
-  python -m app.main "What is machine learning?"
-  python -m app.main ideas "printable wall art for engineering students" --count 5
-  python -m app.main metadata data/processed/ideas_2026-09-26_191858.json --index 1
+  python -m app.main qc
   python -m app.main report
 '''
 
@@ -86,6 +82,10 @@ def main() -> None:
             print(USAGE)
             return
         metadata_workflow.run(ideas_file=ideas_file, index=index, model=model)
+        return
+
+    if args[0] == "qc":
+        qc_workflow.run()
         return
 
     if args[0] == "report":
