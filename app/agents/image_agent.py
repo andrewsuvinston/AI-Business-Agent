@@ -6,14 +6,12 @@ Requires:
 """
 
 import json
-import os
 import random
 import time
 import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
-
 from config import settings
 
 COMFY_HOST = settings.COMFYUI_HOST
@@ -118,4 +116,95 @@ def generate(prompt: str,
     dest = out_dir / f"image_{seed:010d}.png"
     _download(f"{COMFY_HOST}/view?{qs}", dest)
     print(f"  saved -> {dest}")
+    return dest
+# ---------------------------------------------------------------------------
+# Upscale via ComfyUI (uses Real-ESRGAN .pth model on CPU through torch)
+# ---------------------------------------------------------------------------
+
+UPSCALE_MODEL_NAME = "RealESRGAN_x4plus.pth"
+
+
+def _upscale_workflow(server_filename: str, target_size: int = 2000) -> dict:
+    """ComfyUI workflow in API format for 4x upscale + resize."""
+    return {
+        "1": {"class_type": "LoadImage",
+              "inputs": {"image": server_filename}},
+        "2": {"class_type": "UpscaleModelLoader",
+              "inputs": {"model_name": UPSCALE_MODEL_NAME}},
+        "3": {"class_type": "ImageUpscaleWithModel",
+              "inputs": {"upscale_model": ["2", 0], "image": ["1", 0]}},
+        "4": {"class_type": "ImageScale",
+              "inputs": {"image": ["3", 0],
+                         "width": target_size, "height": target_size,
+                         "upscale_method": "lanczos", "crop": "disabled"}},
+        "5": {"class_type": "SaveImage",
+              "inputs": {"filename_prefix": "upscaled", "images": ["4", 0]}},
+    }
+
+
+def _upload_image(path: Path) -> str:
+    """Upload a local image to ComfyUI's input folder. Returns server filename."""
+    boundary = "----comfy" + uuid.uuid4().hex
+    body = b"".join([
+        f"--{boundary}\r\n".encode(),
+        f'Content-Disposition: form-data; name="image"; filename="{path.name}"\r\n'.encode(),
+        b"Content-Type: image/png\r\n\r\n",
+        path.read_bytes(),
+        f"\r\n--{boundary}--\r\n".encode(),
+    ])
+    req = urllib.request.Request(
+        f"{COMFY_HOST}/upload/image",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        resp = json.loads(r.read().decode("utf-8"))
+    return resp["name"]
+
+
+def upscale_via_comfy(src: Path, target_size: int = 2000) -> Path:
+    """Upscale src using ComfyUI's Real-ESRGAN node on CPU.
+
+    Returns the path to the upscaled PNG saved next to src.
+    """
+    src = Path(src)
+    if not src.exists():
+        raise FileNotFoundError(f"Image not found: {src}")
+
+    print(f"  [upscale] uploading {src.name} to ComfyUI...")
+    server_name = _upload_image(src)
+
+    wf = _upscale_workflow(server_name, target_size)
+    resp = _post_json(f"{COMFY_HOST}/prompt", {"prompt": wf})
+    prompt_id = resp["prompt_id"]
+    print(f"  [upscale] queued prompt_id={prompt_id}")
+
+    start = time.time()
+    while True:
+        try:
+            history = _get_json(f"{COMFY_HOST}/history/{prompt_id}")
+            if prompt_id in history:
+                break
+        except Exception as e:
+            print(f"  [upscale] (poll hiccup: {e}) -- retrying")
+        print(f"  [upscale] still upscaling... {int(time.time() - start)}s")
+        time.sleep(5)
+
+    outputs = history[prompt_id]["outputs"]
+    image_info = None
+    for node in outputs.values():
+        if "images" in node and node["images"]:
+            image_info = node["images"][0]
+            break
+    if image_info is None:
+        raise RuntimeError(f"No image in ComfyUI upscale output: {outputs}")
+
+    qs = urllib.parse.urlencode({
+        "filename": image_info["filename"],
+        "subfolder": image_info.get("subfolder", ""),
+        "type": image_info.get("type", "output"),
+    })
+    dest = src.with_name(src.stem + f"_upscaled_{target_size}.png")
+    _download(f"{COMFY_HOST}/view?{qs}", dest)
+    print(f"  [upscale] saved -> {dest}")
     return dest
