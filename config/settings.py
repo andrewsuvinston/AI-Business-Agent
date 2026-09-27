@@ -13,6 +13,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 # --- Model settings ---
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:latest")
+COMFYUI_HOST = os.getenv("COMFYUI_HOST", "http://127.0.0.1:8188")
 
 # --- Data directories ---
 DATA_DIR = PROJECT_ROOT / "data"
