@@ -5,19 +5,28 @@ Commands:
     python -m app.main ideas "<direction>" [--count N] [--model M]
     python -m app.main metadata <ideas_file> [--index N] [--model M]
     python -m app.main image <ideas_file> [--index N]
+    python -m app.main enhance <ideas_file> [--index N]
     python -m app.main qc
     python -m app.main report
 """
 import sys
 
 from app.models.llm import ask
-from app.workflows import idea_workflow, image_workflow, metadata_workflow, qc_workflow, report_workflow
+from app.workflows import (
+    enhance_workflow,
+    idea_workflow,
+    image_workflow,
+    metadata_workflow,
+    qc_workflow,
+    report_workflow,
+)
 
 USAGE = '''Usage:
   python -m app.main "your question here"
   python -m app.main ideas "<direction>" [--count N] [--model MODEL]
   python -m app.main metadata <ideas_file> [--index N] [--model MODEL]
   python -m app.main image <ideas_file> [--index N]
+  python -m app.main enhance <ideas_file> [--index N]
   python -m app.main qc
   python -m app.main report
 '''
@@ -93,6 +102,15 @@ def main() -> None:
             print(USAGE)
             return
         image_workflow.run(ideas_path=ideas_file, index=index)
+        return
+
+    if args[0] == "enhance":
+        ideas_file, index, _ = _parse_metadata_args(args[1:])
+        if not ideas_file:
+            print("Error: no ideas file given.")
+            print(USAGE)
+            return
+        enhance_workflow.run(ideas_path=ideas_file, index=index)
         return
 
     if args[0] == "qc":
