@@ -45,4 +45,11 @@ def check(idea: Any) -> tuple[bool, list[str]]:
     if not isinstance(keywords, list) or not keywords:
         reasons.append("keywords must be a non-empty list")
 
+    # Optional image check: if an image path is given, the file must exist.
+    from pathlib import Path
+    for key in ("image_path", "image_upscaled_path"):
+        p = idea.get(key)
+        if p and not Path(p).exists():
+            reasons.append(f"{key} points to missing file: {p}")
+
     return (len(reasons) == 0), reasons
