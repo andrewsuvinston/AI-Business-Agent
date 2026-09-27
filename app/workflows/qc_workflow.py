@@ -22,10 +22,10 @@ def _slug(text: str, max_len: int = 40) -> str:
     cleaned = "-".join(p for p in cleaned.split("-") if p)
     return cleaned[:max_len] or "item"
 def _clean_dir(folder: Path) -> None:
-    """Remove everything in folder except .gitkeep. Recreate the folder."""
+    """Remove everything in folder except .gitkeep and stock/. Recreate the folder."""
     folder.mkdir(parents=True, exist_ok=True)
     for item in folder.iterdir():
-        if item.name == ".gitkeep":
+        if item.name in (".gitkeep", "stock"):
             continue
         if item.is_file():
             item.unlink()
