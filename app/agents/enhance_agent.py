@@ -40,6 +40,7 @@ def upscale(src: Path, size: int = DEFAULT_SIZE, dpi: int = DEFAULT_DPI) -> Path
             "-o", str(temp_4x),
             "-n", "realesrgan-x4plus",
             "-s", "4",
+            "-g", "-1",   # force CPU (Intel iGPU fails on Vulkan)
         ]
         print(f"[enhance] Running Real-ESRGAN (4x)... this may take a minute.")
         result = subprocess.run(cmd, capture_output=True, text=True)
