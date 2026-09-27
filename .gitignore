@@ -18,3 +18,4 @@ outputs/*
 .vscode/
 .idea/
 sd15_basic.json
+tools/
