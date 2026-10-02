@@ -7,7 +7,7 @@ Commands:
     python -m app.main image <ideas_file> [--index N | --all]
     python -m app.main enhance <ideas_file> [--index N | --all]
     python -m app.main quality <ideas_file> [--index N | --all]
-    python -m app.main run <ideas_file> [--index N | --all] [--model M]
+    python -m app.main run <ideas_file> [--index N | --all] [--model M] [--force]
     python -m app.main qc
     python -m app.main report
 """
@@ -33,7 +33,7 @@ USAGE = '''Usage:
   python -m app.main image <ideas_file> [--index N | --all]
   python -m app.main enhance <ideas_file> [--index N | --all]
   python -m app.main quality <ideas_file> [--index N | --all]
-  python -m app.main run <ideas_file> [--index N | --all] [--model MODEL]
+  python -m app.main run <ideas_file> [--index N | --all] [--model MODEL] [--force]
   python -m app.main qc
   python -m app.main report
 '''
@@ -76,10 +76,6 @@ def _parse_idea_args(args: list[str]) -> tuple[str, int, str | None]:
 
 
 def _parse_metadata_args(args: list[str]) -> tuple[str, int, str | None, bool]:
-    """Parse <file> [--index N | --all] [--model M].
-
-    Returns (file, index, model, all_flag).
-    """
     args, all_flag = _pop_bool_flag(args, "--all")
     args, index_raw = _pop_flag(args, "--index")
     index = 1
@@ -98,7 +94,7 @@ def _parse_metadata_args(args: list[str]) -> tuple[str, int, str | None, bool]:
 # ---------------------------------------------------------------------------
 
 def _for_each_idea(ideas_path: str, fn) -> None:
-    """Call fn(index=i) for i in 1..N. Continues past per-idea failures."""
+    """Call fn(index=i) for i in 1..N. Continue past per-idea failures."""
     data = load_json(Path(ideas_path))
     ideas = data.get("ideas", [])
     total = len(ideas)
@@ -107,24 +103,40 @@ def _for_each_idea(ideas_path: str, fn) -> None:
         return
 
     succeeded = 0
+    skipped = 0
     failed = 0
     for i in range(1, total + 1):
         print(f"\n--- idea {i}/{total} ---")
         try:
-            fn(index=i)
-            succeeded += 1
+            result = fn(index=i)
+            if result == "skipped":
+                skipped += 1
+            else:
+                succeeded += 1
         except Exception as e:
             failed += 1
             print(f"[error] idea #{i} failed: {e}")
 
-    print(f"\n[done] {succeeded} succeeded, {failed} failed (of {total})")
+    print(f"\n[done] {succeeded} done, {skipped} skipped, {failed} failed (of {total})")
 
 
 # ---------------------------------------------------------------------------
 # `run` command — the full pipeline for one idea
 # ---------------------------------------------------------------------------
 
-def _pipeline(ideas_file: str, index: int, model: str | None) -> None:
+def _pipeline(ideas_file: str, index: int, model: str | None, force: bool = False):
+    # Skip-guard: if this idea already produced a stock image, skip unless --force
+    if not force:
+        data = load_json(Path(ideas_file))
+        ideas = data.get("ideas", [])
+        if 1 <= index <= len(ideas):
+            stock = ideas[index - 1].get("image_stock_path")
+            if stock and Path(stock).exists():
+                print(f"[skip] idea #{index} already has stock image")
+                print(f"       {stock}")
+                print(f"       (use --force to redo)")
+                return "skipped"
+
     print(f"\n{'='*68}\n  PIPELINE — idea #{index}\n{'='*68}")
     print("\n[1/4] image")
     image_workflow.run(ideas_path=ideas_file, index=index)
@@ -135,6 +147,7 @@ def _pipeline(ideas_file: str, index: int, model: str | None) -> None:
     print("\n[4/4] metadata")
     metadata_workflow.run(ideas_file=ideas_file, index=index, model=model)
     print(f"\n[done] idea #{index} pipeline complete")
+    return "done"
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +161,6 @@ def main() -> None:
         print(USAGE)
         return
 
-    # --- ideas ---
     if args[0] == "ideas":
         direction, count, model = _parse_idea_args(args[1:])
         if not direction:
@@ -158,7 +170,6 @@ def main() -> None:
         idea_workflow.run(direction=direction, count=count, model=model)
         return
 
-    # --- metadata ---
     if args[0] == "metadata":
         ideas_file, index, model, all_flag = _parse_metadata_args(args[1:])
         if not ideas_file:
@@ -176,7 +187,6 @@ def main() -> None:
             metadata_workflow.run(ideas_file=ideas_file, index=index, model=model)
         return
 
-    # --- image ---
     if args[0] == "image":
         ideas_file, index, _, all_flag = _parse_metadata_args(args[1:])
         if not ideas_file:
@@ -192,7 +202,6 @@ def main() -> None:
             image_workflow.run(ideas_path=ideas_file, index=index)
         return
 
-    # --- enhance ---
     if args[0] == "enhance":
         ideas_file, index, _, all_flag = _parse_metadata_args(args[1:])
         if not ideas_file:
@@ -208,7 +217,6 @@ def main() -> None:
             enhance_workflow.run(ideas_path=ideas_file, index=index)
         return
 
-    # --- quality ---
     if args[0] == "quality":
         ideas_file, index, _, all_flag = _parse_metadata_args(args[1:])
         if not ideas_file:
@@ -224,9 +232,10 @@ def main() -> None:
             quality_workflow.run(ideas_path=ideas_file, index=index)
         return
 
-    # --- run (full pipeline) ---
     if args[0] == "run":
-        ideas_file, index, model, all_flag = _parse_metadata_args(args[1:])
+        # --force is unique to `run`
+        args_rest, force = _pop_bool_flag(args[1:], "--force")
+        ideas_file, index, model, all_flag = _parse_metadata_args(args_rest)
         if not ideas_file:
             print("Error: no ideas file given.")
             print(USAGE)
@@ -234,23 +243,20 @@ def main() -> None:
         if all_flag:
             _for_each_idea(
                 ideas_file,
-                lambda index: _pipeline(ideas_file, index, model),
+                lambda index: _pipeline(ideas_file, index, model, force=force),
             )
         else:
-            _pipeline(ideas_file, index, model)
+            _pipeline(ideas_file, index, model, force=force)
         return
 
-    # --- qc ---
     if args[0] == "qc":
         qc_workflow.run()
         return
 
-    # --- report ---
     if args[0] == "report":
         report_workflow.run()
         return
 
-    # --- default: free-text chat ---
     prompt = " ".join(args)
     print(f"\n>>> Prompt: {prompt}\n")
     print("--- Local model reply ---")
