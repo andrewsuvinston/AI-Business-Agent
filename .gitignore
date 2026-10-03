@@ -19,3 +19,9 @@ outputs/*
 .idea/
 sd15_basic.json
 tools/
+# Never commit these
+*API key.txt
+*Api key.txt
+*api key.txt
+*API Key.txt
+secrets/
